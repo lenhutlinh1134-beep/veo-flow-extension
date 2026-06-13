@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "VEO Flow — Video & Image Studio",
+  "version": "1.0",
+  "description": "Tự động tạo video và ảnh hàng loạt trên Google Flow và Meta AI",
+  "permissions": ["activeTab", "scripting", "storage", "downloads", "sidePanel", "tabs"],
+  "host_permissions": [
+    "https://labs.google/*",
+    "https://labs.google.com/*",
+    "https://*.meta.ai/*",
+    "http://localhost:4000/*"
+  ],
+  "background": { "service_worker": "src/background.js" },
+  "action": { "default_title": "VEO Flow" },
+  "side_panel": { "default_path": "sidepanel.html" },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
