@@ -1,6 +1,9 @@
 // content.js — cầu nối background ↔ injected.js
 // Chạy trong ISOLATED world trên trang Google Flow
 
+if (window.__veoFlowContent) { throw new Error('[VEO] content.js đã load rồi, bỏ qua'); }
+window.__veoFlowContent = true;
+
 let injected = false;
 let msgCounter = 0;
 const pending = new Map();
@@ -136,7 +139,7 @@ async function runItem(item, mode, platform, delayMs, settings = {}) {
   setStatus(`<div>⌨️ Nhập prompt #${item.id}...</div>`);
   const typeResult = await callInjected('TYPE_TEXT', { text: item.text });
   if (!typeResult.ok) throw new Error(`Nhập text thất bại: ${typeResult.error}`);
-  await sleep(1000);
+  await sleep(300);
 
   // ── Chụp snapshot TRƯỚC khi submit ──
   const snapSrcs = takeMediaSnapshot(mode);
