@@ -13,7 +13,7 @@
 
     try {
       if (action === 'TYPE_TEXT') reply(id, await typeText(payload.text));
-      if (action === 'CLICK_SUBMIT') reply(id, clickSubmit(payload.platform || ''));
+      if (action === 'CLICK_SUBMIT') reply(id, await clickSubmit(payload.platform || ''));
       if (action === 'SCAN_PAGE') reply(id, scanPage());
       if (action === 'UPLOAD_FILE') reply(id, await uploadFile(payload.imageBase64, payload.filename));
     } catch (err) {
@@ -383,34 +383,39 @@
     }
   }
 
-  // ── Click nút submit ──
-  function clickSubmit(platform) {
+  // ── Click nút submit — đợi nút sáng lên (active) rồi mới click ──
+  async function clickSubmit(platform) {
     const input = findInput();
+
     if (input) {
-      // Gửi Enter vào ô nhập
+      // Gửi Enter vào ô nhập (hoạt động trên Meta AI chat)
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }));
       input.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }));
       input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
     }
 
-    const btn = findSubmitButton();
-    if (btn) {
-      btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-      btn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
-      btn.click();
-      return { ok: true, method: 'button-click', text: btn.textContent.trim().slice(0, 30) };
-    }
-
-    if (input) {
-      // Meta AI là chat interface — Enter key hoạt động để gửi tin nhắn
-      if (platform === 'meta-ai') {
-        return { ok: true, method: 'enter-key' };
+    // Poll mỗi 200ms cho đến khi nút Submit SÁNG LÊN (active, không disabled) — max 10 giây
+    const start = Date.now();
+    while (Date.now() - start < 10000) {
+      const btn = findSubmitButton(); // chỉ trả về nút active (không disabled)
+      if (btn) {
+        btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+        btn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+        btn.click();
+        return { ok: true, method: 'button-click', waited: Date.now() - start };
       }
-      // Google Flow dùng Slate editor — Enter tạo newline, phải có nút
-      return { ok: false, error: 'Không tìm thấy nút Submit (→). Trang chưa load đầy đủ — thử lại sau vài giây.' };
+      await wait(200);
     }
 
-    return { ok: false, error: 'Không tìm thấy nút Submit hoặc ô nhập. Trang chưa load xong hoặc UI đã đổi?' };
+    // Hết 10 giây chờ nút
+    if (input) {
+      if (platform === 'meta-ai') {
+        return { ok: true, method: 'enter-key' }; // Meta AI: Enter đã gửi rồi
+      }
+      return { ok: false, error: 'Nút Submit chưa sáng lên sau 10 giây. Thử F5 trang rồi chạy lại.' };
+    }
+
+    return { ok: false, error: 'Không tìm thấy nút Submit hoặc ô nhập. Trang chưa load xong?' };
   }
 
   // ── Utility ──
