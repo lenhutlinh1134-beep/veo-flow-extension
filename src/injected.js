@@ -13,7 +13,7 @@
 
     try {
       if (action === 'TYPE_TEXT') reply(id, await typeText(payload.text));
-      if (action === 'CLICK_SUBMIT') reply(id, clickSubmit());
+      if (action === 'CLICK_SUBMIT') reply(id, clickSubmit(payload.platform || ''));
       if (action === 'SCAN_PAGE') reply(id, scanPage());
       if (action === 'UPLOAD_FILE') reply(id, await uploadFile(payload.imageBase64, payload.filename));
     } catch (err) {
@@ -326,7 +326,7 @@
   async function typeText(text) {
     let el = findInput();
     if (!el) {
-      return { ok: false, error: `Không tìm thấy ô nhập. URL: ${location.href}. Hãy click vào ô "Bạn muốn tạo gì?" trước.` };
+      return { ok: false, error: `Không tìm thấy ô nhập. URL: ${location.href}.` };
     }
 
     try {
@@ -336,33 +336,49 @@
       el.click();
       await wait(200);
 
-      // Clean text: Slate editor crash if newline is present
       const cleanText = text.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
 
-      y(el, cleanText);
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+        // Standard input: dùng React native setter
+        const a = Object.getPrototypeOf(el);
+        const setter = Object.getOwnPropertyDescriptor(a, 'value')?.set;
+        setter?.call(el, cleanText);
+        el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'insertText', data: cleanText }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      } else {
+        // contenteditable (Meta AI, Google Flow): xóa hết rồi chèn text thuần — tránh font sai + text bị lặp
+        document.execCommand('selectAll', false, null);
+        await wait(50);
+        document.execCommand('insertText', false, cleanText);
+        el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'insertText', data: cleanText }));
+      }
       await wait(300);
 
-      const getVal = r => r instanceof HTMLInputElement || r instanceof HTMLTextAreaElement ? r.value : r.textContent || "";
-      if (!p(getVal(el), cleanText)) {
-        E(el, cleanText);
-        await wait(150);
+      // Xác nhận bằng độ dài — không so sánh chính xác vì contenteditable có thể có tags thừa
+      const getVal = r => r instanceof HTMLInputElement || r instanceof HTMLTextAreaElement ? r.value : r.innerText || r.textContent || '';
+      const inputVal = getVal(el).replace(/\s+/g, ' ').trim();
+
+      if (inputVal.length < 3) {
+        // Fallback về paste method nếu insertText không hoạt động
+        y(el, cleanText);
+        await wait(300);
+        const inputVal2 = getVal(el).replace(/\s+/g, ' ').trim();
+        if (inputVal2.length < 3) {
+          return { ok: false, error: `Không thể nhập text vào ô. Hãy click vào ô nhập trước rồi thử lại.` };
+        }
       }
 
-      if (!p(getVal(el), cleanText)) {
-        return { ok: false, error: "Không thể xác nhận prompt đã được điền đúng vào ô nhập của labs.google." };
-      }
-
-      return { ok: true, method: 'taoanhai-typing' };
+      return { ok: true, method: 'insertText-plain' };
     } catch (e) {
       return { ok: false, error: e.message };
     }
   }
 
   // ── Click nút submit ──
-  function clickSubmit() {
+  function clickSubmit(platform) {
     const input = findInput();
     if (input) {
-      // Tự động gửi phím Enter vào ô nhập trước
+      // Gửi Enter vào ô nhập
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }));
       input.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }));
       input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
@@ -370,18 +386,22 @@
 
     const btn = findSubmitButton();
     if (btn) {
-      // Gửi cả mousedown + mouseup + click để đảm bảo React handler nhận đủ events
       btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
       btn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
       btn.click();
-      return { ok: true, method: 'enter-and-button-click', text: btn.textContent.trim().slice(0, 30) };
+      return { ok: true, method: 'button-click', text: btn.textContent.trim().slice(0, 30) };
     }
 
     if (input) {
+      // Meta AI là chat interface — Enter key hoạt động để gửi tin nhắn
+      if (platform === 'meta-ai') {
+        return { ok: true, method: 'enter-key' };
+      }
+      // Google Flow dùng Slate editor — Enter tạo newline, phải có nút
       return { ok: false, error: 'Không tìm thấy nút Submit (→). Trang chưa load đầy đủ — thử lại sau vài giây.' };
     }
 
-    return { ok: false, error: 'Không tìm thấy nút Submit hoặc ô nhập. Trang chưa load xong hoặc Google đã đổi UI?' };
+    return { ok: false, error: 'Không tìm thấy nút Submit hoặc ô nhập. Trang chưa load xong hoặc UI đã đổi?' };
   }
 
   // ── Utility ──

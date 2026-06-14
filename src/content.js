@@ -143,7 +143,7 @@ async function runItem(item, mode, platform, delayMs, settings = {}) {
 
   // NGAY LẬP TỨC nhấn Submit sau khi nhận diện prompt trong ô nhập
   setStatus(`<div>🚀 Phát hiện prompt → Submit ngay!</div>`);
-  const submitResult = await callInjected('CLICK_SUBMIT');
+  const submitResult = await callInjected('CLICK_SUBMIT', { platform });
   if (!submitResult.ok) throw new Error(`Gửi thất bại: ${submitResult.error}`);
 
   // Chỉ sau khi submit thành công mới bắt đầu đếm %
