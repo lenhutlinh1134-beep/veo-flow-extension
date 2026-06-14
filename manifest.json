@@ -11,6 +11,30 @@
     "http://localhost:4000/*"
   ],
   "background": { "service_worker": "src/background.js" },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://labs.google/fx/*",
+        "https://labs.google.com/fx/*",
+        "https://*.meta.ai/*",
+        "https://meta.ai/*"
+      ],
+      "js": ["src/content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["src/injected.js"],
+      "matches": [
+        "https://labs.google/*",
+        "https://labs.google.com/*",
+        "https://*.meta.ai/*",
+        "https://meta.ai/*"
+      ]
+    }
+  ],
   "action": { "default_title": "VEO Flow" },
   "side_panel": { "default_path": "sidepanel.html" },
   "icons": {

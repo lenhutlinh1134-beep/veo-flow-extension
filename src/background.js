@@ -119,6 +119,8 @@ async function findFlowTab(platform = 'google-flow') {
 async function ensureScript(tabId) {
   try { await msgTab(tabId,{type:'PING'}); return; } catch {}
   try {
+    // Inject injected.js vào MAIN world trước để bypass CSP của Meta AI / Google Flow
+    await chrome.scripting.executeScript({target:{tabId}, files:['src/injected.js'], world:'MAIN'});
     await chrome.scripting.executeScript({target:{tabId}, files:['src/content.js']});
     await new Promise(r=>setTimeout(r,1000));
   } catch(e) { console.warn('[VEO FLOW BG] inject failed:',e.message); }
