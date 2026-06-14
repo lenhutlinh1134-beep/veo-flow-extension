@@ -249,7 +249,8 @@ function countPrompts() {
   const n = prompts.length;
   const el = document.getElementById('prompt-count');
   if (el) {
-    let typeLabel = mode.includes('video') ? 'video' : 'ảnh';
+    let typeLabel = 'ảnh';
+    if (mode.includes('video')) typeLabel = 'video';
     el.innerHTML = `
       <span class="badge-container">
         <span class="badge badge-prompts">${n} prompt</span>
