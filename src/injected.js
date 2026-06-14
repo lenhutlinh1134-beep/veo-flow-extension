@@ -339,36 +339,45 @@
       const cleanText = text.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
 
       if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
-        // Standard input: dùng React native setter
+        // Standard input/textarea: React native setter
         const a = Object.getPrototypeOf(el);
         const setter = Object.getOwnPropertyDescriptor(a, 'value')?.set;
         setter?.call(el, cleanText);
         el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'insertText', data: cleanText }));
         el.dispatchEvent(new Event('change', { bubbles: true }));
-      } else {
-        // contenteditable (Meta AI, Google Flow): xóa hết rồi chèn text thuần — tránh font sai + text bị lặp
+        const val = el.value.replace(/\s+/g, ' ').trim();
+        if (val.length < 3) return { ok: false, error: 'Không nhập được text vào ô.' };
+        return { ok: true, method: 'react-setter' };
+      }
+
+      if (location.href.includes('meta.ai')) {
+        // Meta AI chat: plain text insert — tránh font sai, text lặp khi paste
         document.execCommand('selectAll', false, null);
         await wait(50);
         document.execCommand('insertText', false, cleanText);
         el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'insertText', data: cleanText }));
+        await wait(300);
+        const val = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+        if (val.length < 3) return { ok: false, error: 'Không nhập được text vào Meta AI.' };
+        return { ok: true, method: 'meta-ai-insertText' };
       }
+
+      // Google Flow Slate editor — dùng TaoAnhAI approach
+      // ClipboardEvent paste cập nhật đúng internal state của Slate (execCommand không làm được)
+      y(el, cleanText);
       await wait(300);
 
-      // Xác nhận bằng độ dài — không so sánh chính xác vì contenteditable có thể có tags thừa
-      const getVal = r => r instanceof HTMLInputElement || r instanceof HTMLTextAreaElement ? r.value : r.innerText || r.textContent || '';
-      const inputVal = getVal(el).replace(/\s+/g, ' ').trim();
-
-      if (inputVal.length < 3) {
-        // Fallback về paste method nếu insertText không hoạt động
-        y(el, cleanText);
-        await wait(300);
-        const inputVal2 = getVal(el).replace(/\s+/g, ' ').trim();
-        if (inputVal2.length < 3) {
-          return { ok: false, error: `Không thể nhập text vào ô. Hãy click vào ô nhập trước rồi thử lại.` };
-        }
+      const getVal = r => r instanceof HTMLInputElement || r instanceof HTMLTextAreaElement ? r.value : r.textContent || '';
+      if (!p(getVal(el), cleanText)) {
+        E(el, cleanText);
+        await wait(150);
       }
 
-      return { ok: true, method: 'insertText-plain' };
+      if (!p(getVal(el), cleanText)) {
+        return { ok: false, error: 'Không thể xác nhận prompt đã được điền vào Google Flow. Hãy thử lại.' };
+      }
+
+      return { ok: true, method: 'slate-taoanhai' };
     } catch (e) {
       return { ok: false, error: e.message };
     }
