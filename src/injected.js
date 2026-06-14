@@ -396,34 +396,68 @@
     }
     // Google Flow: KHÔNG dispatch Enter — Slate editor sẽ tạo newline thay vì submit
 
-    // Poll mỗi 250ms cho đến khi nút Submit SÁNG LÊN (active) — max 8 giây
-    const start = Date.now();
-    let pollCount = 0;
-    while (Date.now() - start < 8000) {
-      const btn = findSubmitButton();
-      pollCount++;
-      if (btn) {
-        console.log(`[VEO] Nút sáng sau ${Date.now()-start}ms (poll #${pollCount}):`, btn.tagName, btn.className, btn.getAttribute('aria-label'));
-        btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-        btn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
-        btn.click();
-        return { ok: true, method: 'button-click', waited: Date.now() - start };
+    // Hàm tìm nút submit với 3 chiến lược cho Google Flow
+    function findFlowSubmitBtn(allowDisabled = false) {
+      // Chiến lược 1: findSubmitButton chuẩn (chỉ active)
+      if (!allowDisabled) {
+        const s1 = findSubmitButton();
+        if (s1) return s1;
       }
-      if (pollCount === 1) {
-        // Log lần đầu để debug: tất cả button hiện có trên trang
-        const allBtns = Array.from(document.querySelectorAll('button, [role="button"]')).filter(b2 => {
-          const r = b2.getBoundingClientRect();
-          return r.width > 0 && r.height > 0;
-        });
-        console.log(`[VEO] Không thấy nút submit. Tất cả button trên trang (${allBtns.length}):`,
-          allBtns.map(b2 => `${b2.tagName}[aria=${b2.getAttribute('aria-label')||''}][dis=${b2.disabled||b2.getAttribute('aria-disabled')||''}] "${(b2.textContent||'').trim().slice(0,30)}"`));
+
+      // Chiến lược 2: Tìm bất kỳ element nào có text "arrow_forward" / "send" → button cha
+      for (const el of Array.from(document.querySelectorAll('*'))) {
+        if (el.children.length > 0) continue;
+        const t = (el.textContent || '').trim();
+        if (t === 'arrow_forward' || t === 'send' || t === 'arrow_circle_right') {
+          const btn = el.closest('button, [role="button"]');
+          if (btn && b(btn) && (allowDisabled || !g(btn))) return btn;
+        }
+      }
+
+      // Chiến lược 3: Button có SVG gần ô nhập nhất (bottom-right của input)
+      if (input) {
+        const ir = input.getBoundingClientRect();
+        const candidates = Array.from(document.querySelectorAll('button, [role="button"]'))
+          .filter(btn => b(btn) && (allowDisabled || !g(btn)) && btn.querySelector('svg'))
+          .map(btn => {
+            const r = btn.getBoundingClientRect();
+            const dist = Math.hypot(r.left - ir.right, r.top + r.height/2 - (ir.top + ir.height/2));
+            return { btn, dist };
+          })
+          .filter(({ dist }) => dist < 300)
+          .sort((a, b2) => a.dist - b2.dist);
+        if (candidates.length > 0) return candidates[0].btn;
+      }
+      return null;
+    }
+
+    function doClick(btn) {
+      btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      btn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+      btn.click();
+    }
+
+    // Poll mỗi 250ms cho đến khi nút Submit SÁNG LÊN — max 8 giây
+    const start = Date.now();
+    while (Date.now() - start < 8000) {
+      const btn = findFlowSubmitBtn(false);
+      if (btn) {
+        doClick(btn);
+        return { ok: true, method: 'button-active', waited: Date.now() - start };
       }
       await wait(250);
     }
 
+    // Hết 8 giây chờ active — thử force-click cả nút disabled (click JS vẫn hoạt động dù disabled CSS)
+    const forceBtn = findFlowSubmitBtn(true);
+    if (forceBtn) {
+      doClick(forceBtn);
+      return { ok: true, method: 'button-force', waited: 8000 };
+    }
+
     // Hết 8 giây
     if (isMetaAI && input) return { ok: true, method: 'enter-key' };
-    if (input) return { ok: false, error: 'Nút Submit chưa sáng lên sau 8 giây. Thử F5 trang rồi chạy lại.' };
+    if (input) return { ok: false, error: 'Nút Submit không tìm thấy sau 8 giây. Thử F5 trang rồi chạy lại.' };
     return { ok: false, error: 'Không tìm thấy nút Submit hoặc ô nhập.' };
   }
 
