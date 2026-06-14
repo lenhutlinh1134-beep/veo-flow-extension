@@ -136,7 +136,7 @@ async function runItem(item, mode, platform, delayMs, settings = {}) {
   setStatus(`<div>⌨️ Nhập prompt #${item.id}...</div>`);
   const typeResult = await callInjected('TYPE_TEXT', { text: item.text });
   if (!typeResult.ok) throw new Error(`Nhập text thất bại: ${typeResult.error}`);
-  await sleep(500);
+  await sleep(1000);
 
   // ── Chụp snapshot TRƯỚC khi submit ──
   const snapSrcs = takeMediaSnapshot(mode);

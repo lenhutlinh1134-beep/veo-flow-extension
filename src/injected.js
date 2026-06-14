@@ -386,36 +386,45 @@
   // ── Click nút submit — đợi nút sáng lên (active) rồi mới click ──
   async function clickSubmit(platform) {
     const input = findInput();
+    const isMetaAI = platform === 'meta-ai';
 
-    if (input) {
-      // Gửi Enter vào ô nhập (hoạt động trên Meta AI chat)
+    if (isMetaAI && input) {
+      // Meta AI chat: Enter key gửi tin nhắn
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }));
       input.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }));
       input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
     }
+    // Google Flow: KHÔNG dispatch Enter — Slate editor sẽ tạo newline thay vì submit
 
-    // Poll mỗi 200ms cho đến khi nút Submit SÁNG LÊN (active, không disabled) — max 10 giây
+    // Poll mỗi 250ms cho đến khi nút Submit SÁNG LÊN (active) — max 8 giây
     const start = Date.now();
-    while (Date.now() - start < 10000) {
-      const btn = findSubmitButton(); // chỉ trả về nút active (không disabled)
+    let pollCount = 0;
+    while (Date.now() - start < 8000) {
+      const btn = findSubmitButton();
+      pollCount++;
       if (btn) {
+        console.log(`[VEO] Nút sáng sau ${Date.now()-start}ms (poll #${pollCount}):`, btn.tagName, btn.className, btn.getAttribute('aria-label'));
         btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
         btn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
         btn.click();
         return { ok: true, method: 'button-click', waited: Date.now() - start };
       }
-      await wait(200);
-    }
-
-    // Hết 10 giây chờ nút
-    if (input) {
-      if (platform === 'meta-ai') {
-        return { ok: true, method: 'enter-key' }; // Meta AI: Enter đã gửi rồi
+      if (pollCount === 1) {
+        // Log lần đầu để debug: tất cả button hiện có trên trang
+        const allBtns = Array.from(document.querySelectorAll('button, [role="button"]')).filter(b2 => {
+          const r = b2.getBoundingClientRect();
+          return r.width > 0 && r.height > 0;
+        });
+        console.log(`[VEO] Không thấy nút submit. Tất cả button trên trang (${allBtns.length}):`,
+          allBtns.map(b2 => `${b2.tagName}[aria=${b2.getAttribute('aria-label')||''}][dis=${b2.disabled||b2.getAttribute('aria-disabled')||''}] "${(b2.textContent||'').trim().slice(0,30)}"`));
       }
-      return { ok: false, error: 'Nút Submit chưa sáng lên sau 10 giây. Thử F5 trang rồi chạy lại.' };
+      await wait(250);
     }
 
-    return { ok: false, error: 'Không tìm thấy nút Submit hoặc ô nhập. Trang chưa load xong?' };
+    // Hết 8 giây
+    if (isMetaAI && input) return { ok: true, method: 'enter-key' };
+    if (input) return { ok: false, error: 'Nút Submit chưa sáng lên sau 8 giây. Thử F5 trang rồi chạy lại.' };
+    return { ok: false, error: 'Không tìm thấy nút Submit hoặc ô nhập.' };
   }
 
   // ── Utility ──
